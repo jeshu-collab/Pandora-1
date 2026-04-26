@@ -9,10 +9,13 @@ mp_drawing = mp.solutions.drawing_utils
 
 # Turn on the Camera
 cap = cv2.VideoCapture(0)
-print("Pandora-1 Vision Engine Online. CCTV Mode Active...")
+print("Pandora-1 Vision Engine Online. Multi-Threat Mode Active...")
 
-# --- THE TIME BUFFER VARIABLE ---
-consecutive_frames = 0  # This will count how long you hold the pose
+# --- THE TIME BUFFERS ---
+# We now track the hold time for all three gestures separately
+xblock_frames = 0
+surrender_frames = 0
+slump_frames = 0
 
 while cap.isOpened():
     success, frame = cap.read()
@@ -26,8 +29,9 @@ while cap.isOpened():
     if results.pose_landmarks:
         mp_drawing.draw_landmarks(frame, results.pose_landmarks, mp_pose.POSE_CONNECTIONS)
 
-        # 1. Grab ALL the necessary joints
+        # 1. Grab Joints (Added the Nose for the Slump detection)
         landmarks = results.pose_landmarks.landmark
+        nose = landmarks[0]
         left_shoulder = landmarks[11]
         right_shoulder = landmarks[12]
         left_elbow = landmarks[13]
@@ -36,47 +40,66 @@ while cap.isOpened():
         right_wrist = landmarks[16]
         
         # Convert to screen pixels
+        n_y = int(nose.y * h)
         ls_x, ls_y = int(left_shoulder.x * w), int(left_shoulder.y * h)
         rs_x, rs_y = int(right_shoulder.x * w), int(right_shoulder.y * h)
-        le_y, re_y = int(left_elbow.y * h), int(right_elbow.y * h) # Only need Y for elbows
+        le_y, re_y = int(left_elbow.y * h), int(right_elbow.y * h)
         lw_x, lw_y = int(left_wrist.x * w), int(left_wrist.y * h)
         rw_x, rw_y = int(right_wrist.x * w), int(right_wrist.y * h)
 
         # --- THE MATH & FILTERS ---
-        
-        # Filter 1: Dynamic Scaling (Measure shoulder width)
         shoulder_width = math.hypot(ls_x - rs_x, ls_y - rs_y)
         wrist_distance = math.hypot(lw_x - rw_x, lw_y - rw_y)
         
-        # Check: Are the wrists crossed? (Distance is less than half the shoulder width)
+        # GESTURE 1: X-BLOCK (Untouched)
         is_crossed = wrist_distance < (shoulder_width * 0.6)
-
-        # Filter 2: The Elbow Rule (Are wrists physically HIGHER than elbows? Remember Y is smaller at the top)
         is_raised = (lw_y < le_y) and (rw_y < re_y)
 
-        # Filter 3: The Time Buffer
+        # GESTURE 2: SURRENDER
+        # Wrists above elbows, elbows above shoulders, and NOT crossed.
+        is_surrender = (lw_y < le_y < ls_y) and (rw_y < re_y < rs_y) and not is_crossed
+
+        # GESTURE 3: THE SLUMP
+        # Nose drops below BOTH shoulders. 
+        is_slumped = (n_y > ls_y) and (n_y > rs_y)
+
+        # --- UPDATE TIME BUFFERS ---
         if is_crossed and is_raised:
-            consecutive_frames += 1  # Add a frame to the counter
+            xblock_frames += 1
+        else: xblock_frames = 0
+
+        if is_surrender:
+            surrender_frames += 1
+        else: surrender_frames = 0
+
+        if is_slumped:
+            slump_frames += 1
+        else: slump_frames = 0
+
+        # --- TRIGGER THE ALERTS ---
+        # We check the buffers and send a specific UI alert
+        
+        # 1. X-Block (100 frames) -> Red Threat
+        if xblock_frames > 100:
+            cv2.putText(frame, "THREAT: X-BLOCK SOS!", (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 4)
+            cv2.rectangle(frame, (0,0), (w,h), (0, 0, 255), 8) # Red Border
             
-            # Draw a yellow warning box while it "charges up"
-            cv2.putText(frame, f"ANALYZING... {consecutive_frames}/100", (20, 80), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 3)
-        else:
-            consecutive_frames = 0   # Reset if they drop their arms
+        # 2. Surrender (100 frames) -> Orange Threat
+        elif surrender_frames > 100:
+            cv2.putText(frame, "WARNING: SURRENDER DETECTED", (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 165, 255), 4)
+            cv2.rectangle(frame, (0,0), (w,h), (0, 165, 255), 8) # Orange Border
+            
+        # 3. Slump (100 frames) -> Blue Medical Alert
+        # (Requires a longer hold time so it doesn't trigger if you just bend over to tie your shoe)
+        elif slump_frames > 100:
+            cv2.putText(frame, "MEDICAL: SLUMP / COLLAPSE", (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 0, 0), 4)
+            cv2.rectangle(frame, (0,0), (w,h), (255, 0, 0), 8) # Blue Border
 
-        # --- THE TRIGGER ---
-        # If they hold the pose for 100 frames (roughly 0.5 to 1 second)
-        if consecutive_frames > 100:
-            cv2.putText(frame, "CRITICAL: X-BLOCK SOS VERIFIED!", (20, 140), 
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 4)
-            # You can also draw a massive red box around the frame here for effect
-            cv2.rectangle(frame, (0,0), (w,h), (0, 0, 255), 10)
+        # Debug text to see what the AI is thinking
+        cv2.putText(frame, f"Buffers - X: {xblock_frames} | Surrender: {surrender_frames} | Slump: {slump_frames}", 
+                    (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-        # Print data to screen for debugging
-        cv2.putText(frame, f"Crossed: {is_crossed} | Raised: {is_raised}", (20, 40), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-
-    cv2.imshow("Pandora-1: CCTV Mode", frame)
+    cv2.imshow("Pandora-1: Multi-Threat Mode", frame)
 
     if cv2.waitKey(1) & 0xFF == ord('q'): break
 

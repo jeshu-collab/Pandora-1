@@ -36,7 +36,23 @@
     transition: background-color 0.3s, color 0.3s; 
   }
   
-  /* Glassmorphism Login Overlay */
+  /* Log Details Modal */
+  #log-modal {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+    background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(5px);
+    z-index: 10000; align-items: center; justify-content: center;
+  }
+  .modal-content {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    width: 60%; max-width: 800px; padding: 25px; position: relative; box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  }
+  .close-btn {
+    position: absolute; right: 20px; top: 20px; background: none; border: none; 
+    color: var(--text-muted); font-size: 24px; cursor: pointer; transition: 0.2s;
+  }
+  .close-btn:hover { color: var(--police); }
+
+  /* Login Overlay */
   #login-overlay { 
     position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
     background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(10px); 
@@ -59,7 +75,15 @@
     padding: 8px 16px; border-radius: 6px; cursor: pointer; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 13px; transition: 0.2s;
   }
   .ctrl-btn:hover { background: var(--border); }
-  #conn-status { font-family: 'Fira Code', monospace; font-weight: 600; font-size: 14px; margin-right: 10px; }
+  #conn-status { font-family: 'Fira Code', monospace; font-weight: 600; font-size: 14px; margin-right: 10px; margin-left: 15px; }
+
+  /* Lockdown Override */
+  .btn-lockdown { 
+    background: rgba(239, 68, 68, 0.1); color: var(--police); border: 2px solid var(--police); 
+    padding: 8px 16px; cursor: pointer; border-radius: 6px; font-weight: 800; transition: 0.2s; font-size: 13px; letter-spacing: 1px;
+  }
+  .btn-lockdown:hover { background: var(--police); color: #fff; box-shadow: 0 0 15px rgba(239, 68, 68, 0.4); }
+  .lockdown-mode { animation: global-flash 1.5s infinite alternate; }
 
   /* Sidebar Layout */
   #sidebar { 
@@ -71,7 +95,6 @@
   .sidebar-header h3 { margin: 0; font-weight: 800; font-size: 1.2rem; letter-spacing: 1px; }
   .sidebar-header p { margin: 5px 0 0; font-size: 11px; font-family: 'Fira Code', monospace; color: var(--text-muted); }
 
-  /* Diagnostics Widget */
   #diagnostics { padding: 20px; border-bottom: 1px solid var(--border); font-family: 'Fira Code', monospace; font-size: 12px; }
   .diag-row { display: flex; justify-content: space-between; margin-bottom: 8px; color: var(--text-muted); }
   .diag-row span:last-child { color: var(--text); font-weight: 600; }
@@ -86,8 +109,9 @@
   #log-container { flex: 1; padding: 15px; overflow-y: auto; font-family: 'Fira Code', monospace; font-size: 11px; }
   .log-entry { 
     margin-bottom: 10px; border-left: 3px solid; padding: 10px; background: rgba(0,0,0,0.2); 
-    border-radius: 0 6px 6px 0; color: var(--text-muted); line-height: 1.4;
+    border-radius: 0 6px 6px 0; color: var(--text-muted); line-height: 1.4; cursor: pointer; transition: 0.2s;
   }
+  .log-entry:hover { background: rgba(255,255,255,0.05); transform: translateX(2px); }
   .log-entry b { color: var(--text); }
   
   /* Main Dashboard Area */
@@ -96,7 +120,7 @@
   .tab.active { display: flex; flex-direction: column; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
   
-  h1 { font-weight: 800; font-size: 2rem; margin-top: 0; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; }
+  h1 { font-weight: 800; font-size: 2rem; margin-top: 0; margin-bottom: 25px; }
   
   /* Alert Box & Stats */
   .alert-box { 
@@ -130,14 +154,6 @@
   .btn-res { background: #22c55e; color: #fff; }
   .btn-res:hover { background: #4ade80; }
 
-  /* Lockdown Override */
-  .btn-lockdown { 
-    background: rgba(239, 68, 68, 0.1); color: var(--police); border: 2px solid var(--police); 
-    padding: 10px 20px; cursor: pointer; border-radius: 8px; font-weight: 800; transition: 0.2s; font-size: 14px;
-  }
-  .btn-lockdown:hover { background: var(--police); color: #fff; box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); }
-  .lockdown-mode { animation: global-flash 1.5s infinite alternate; }
-
   /* Tab Specific Colors */
   #police .title, #police h1 { color: var(--police); }
   #police .alert-box { background: rgba(239, 68, 68, 0.1); border-color: var(--police); animation: flashRed 0.6s infinite alternate; }
@@ -156,6 +172,16 @@
 </head>
 <body>
 
+  <div id="log-modal">
+    <div class="modal-content">
+      <button class="close-btn" onclick="document.getElementById('log-modal').style.display='none'">✖</button>
+      <h2 id="modal-title" style="margin-top:0; color:var(--accent); font-weight:800; letter-spacing:1px;">INCIDENT DETAILS</h2>
+      <p id="modal-info" style="font-family: 'Fira Code', monospace; color:var(--text-muted); border-bottom: 1px solid var(--border); padding-bottom: 15px; margin-bottom: 20px;"></p>
+      <img id="modal-img" src="" style="width:100%; max-height:400px; object-fit:contain; border:2px solid #000; background:#000; border-radius:8px;" alt="IMAGE PURGED FROM VOLATILE MEMORY">
+      <div id="modal-no-img" style="display:none; text-align:center; padding: 40px; border: 1px dashed var(--police); color: var(--police); font-family: 'Fira Code', monospace;">[!] IMAGE DATA PURGED FROM VOLATILE MEMORY FOR SECURITY PURPOSES</div>
+    </div>
+  </div>
+
   <div id="login-overlay">
     <h2>PANDORA-1 COMMAND NODE</h2>
     <p>AUTHORIZED ACCESS ONLY // VIT-AP</p>
@@ -163,6 +189,7 @@
   </div>
 
   <div id="topbar">
+    <button class="btn-lockdown" onclick="triggerLockdown()">🚨 INITIATE GLOBAL LOCKDOWN</button>
     <span id="conn-status" style="color: #64748b;">WAITING FOR UPLINK...</span>
     <button class="ctrl-btn" onclick="toggleTheme()">🌓 Theme</button>
     <button class="ctrl-btn" id="mute-btn" onclick="toggleMute()">🔊 Audio On</button>
@@ -193,9 +220,8 @@
   </div>
 
   <div id="main">
-    
     <div id="police" class="tab active">
-      <h1>Police Command <button class="btn-lockdown" onclick="triggerLockdown()">🚨 INITIATE LOCKDOWN</button></h1>
+      <h1>Police Command</h1>
       <div id="police-alert" class="alert-box">
         <div class="title">🚨 THREAT DETECTED: <span id="police-bldg"></span></div>
         <div class="alert-stats">
@@ -233,7 +259,7 @@
     </div>
 
     <div id="fire" class="tab">
-      <h1>Fire Command <button class="btn-lockdown" onclick="triggerLockdown()" style="color:var(--fire); border-color:var(--fire);">🔥 TRIGGER SPRINKLERS</button></h1>
+      <h1>Fire Command</h1>
       <div id="fire-alert" class="alert-box">
         <div class="title">🔥 FIRE DETECTED: <span id="fire-bldg"></span></div>
         <div class="alert-stats">
@@ -250,25 +276,24 @@
         <button class="btn-res" onclick="resolve('fire')">Resolve Fire</button>
       </div>
     </div>
-
   </div>
 
   <script>
-    // System Variables
     let isMuted = false;
     let maps = {};
     let markers = {};
     let countdowns = {};
+    
+    // Persistent Text Logs, Volatile Image Session
     let logs = JSON.parse(localStorage.getItem('pandoraLogs')) || [];
+    const sessionImages = {}; 
     const colors = { police: "var(--police)", medical: "var(--medical)", fire: "var(--fire)" };
 
-    // Diagnostics Simulator
     setInterval(() => {
       document.getElementById("diag-cpu").innerText = Math.floor(Math.random() * 15 + 30) + "%";
       document.getElementById("diag-net").innerText = Math.floor(Math.random() * 10 + 10) + " ms";
     }, 2000);
 
-    // Map Engine
     function initMaps() {
       ['police', 'medical', 'fire'].forEach(dept => {
         maps[dept] = L.map(`${dept}-map`).setView([16.4961, 80.4994], 18);
@@ -277,7 +302,6 @@
       });
     }
 
-    // Login Overlay
     function checkLogin(e) {
       if(e.key === 'Enter') {
         if(e.target.value === 'admin') {
@@ -289,14 +313,12 @@
       }
     }
 
-    // UI Controls
     function toggleTheme() { document.body.classList.toggle('light-mode'); }
     function toggleMute() {
       isMuted = !isMuted;
       document.getElementById('mute-btn').innerText = isMuted ? '🔇 Audio Off' : '🔊 Audio On';
     }
 
-    // Audio Engine
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     function playBeep(type) {
       if (isMuted) return;
@@ -307,7 +329,6 @@
       setTimeout(() => osc.stop(), 600);
     }
 
-    // Navigation
     function switchTab(tabId) {
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
       document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -316,7 +337,6 @@
       setTimeout(() => maps[tabId].invalidateSize(), 100);
     }
 
-    // Dispatch Timers
     function startTimer(dept) {
       clearInterval(countdowns[dept]);
       let time = 180;
@@ -334,7 +354,6 @@
       if (!isMuted) playBeep('police');
     }
 
-    // WebSocket Logic
     const ws = new WebSocket("ws://localhost:8765");
     ws.onopen = () => { 
       const status = document.getElementById("conn-status");
@@ -349,6 +368,7 @@
       const data = JSON.parse(e.data);
       const tabMap = { active_threat: "police", deliberate_sos: "police", medical_collapse: "medical", fire_emergency: "fire" };
       const target = tabMap[data.alert_type];
+      const logId = Date.now().toString(); // Generate Unique ID for the Volatile Image Array
       
       document.querySelector(`button[onclick="switchTab('${target}')"]`).click();
       
@@ -364,7 +384,7 @@
       alertBox.style.display = "block";
       alertBox.style.background = "";
       alertBox.style.animation = "none";
-      void alertBox.offsetWidth; // Trigger reflow to restart animation
+      void alertBox.offsetWidth; 
       alertBox.style.animation = target === 'police' ? "flashRed 0.6s infinite alternate" : target === 'medical' ? "flashBlue 1s infinite alternate" : "flashOrange 0.4s infinite alternate";
       
       document.getElementById(`${target}-img`).src = "data:image/jpeg;base64," + data.image;
@@ -377,7 +397,11 @@
       startTimer(target);
 
       const timeStr = new Date().toLocaleTimeString();
-      logs.unshift({ time: timeStr, type: data.alert_type.toUpperCase(), loc: data.room, dept: target });
+      
+      // Store image in volatile memory, store text in persistent storage
+      sessionImages[logId] = data.image;
+      logs.unshift({ id: logId, time: timeStr, type: data.alert_type.toUpperCase(), loc: data.room, dept: target });
+      
       if (logs.length > 50) logs.pop();
       localStorage.setItem('pandoraLogs', JSON.stringify(logs));
       renderLogs();
@@ -390,9 +414,35 @@
         const div = document.createElement("div");
         div.className = "log-entry";
         div.style.borderColor = colors[log.dept];
+        // Log Click triggers the Modal
+        div.onclick = () => viewLog(log.id);
         div.innerHTML = `<b>${log.time}</b><br>${log.type}<br><span style="color:var(--text-muted);">${log.loc}</span>`;
         container.appendChild(div);
       });
+    }
+
+    // Modal Display Logic
+    function viewLog(id) {
+      const log = logs.find(l => l.id === id);
+      if(!log) return;
+      
+      document.getElementById('modal-title').innerText = log.type;
+      document.getElementById('modal-title').style.color = colors[log.dept];
+      document.getElementById('modal-info').innerHTML = `<b>TIMESTAMP:</b> ${log.time} &nbsp;&nbsp;|&nbsp;&nbsp; <b>LOCATION:</b> ${log.loc}`;
+      
+      const imgElem = document.getElementById('modal-img');
+      const noImgElem = document.getElementById('modal-no-img');
+      
+      if(sessionImages[id]) {
+        imgElem.src = "data:image/jpeg;base64," + sessionImages[id];
+        imgElem.style.display = "block";
+        noImgElem.style.display = "none";
+      } else {
+        imgElem.style.display = "none";
+        noImgElem.style.display = "block";
+      }
+      
+      document.getElementById('log-modal').style.display = 'flex';
     }
 
     function acknowledge(dept) {
@@ -401,6 +451,7 @@
       document.getElementById(`${dept}-alert`).style.animation = "none";
       document.getElementById(`${dept}-alert`).style.background = "rgba(0,0,0,0.2)";
     }
+    
     function resolve(dept) {
       clearInterval(countdowns[dept]);
       document.getElementById(`${dept}-alert`).style.display = "none";

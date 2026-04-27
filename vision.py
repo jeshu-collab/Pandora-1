@@ -15,6 +15,7 @@ from ultralytics import YOLO
 # --- SYSTEM INITIALIZATION ---
 print("Booting Pandora-PRO V10 Ultimate Command Center...")
 
+# Bypassing MediaPipe - Using YOLOv8 Edge AI
 model = YOLO("yolov8n-pose.pt")
 
 EVIDENCE_DIR = "Evidence_Logs"
@@ -143,11 +144,11 @@ async def main():
             alert_id = None
             threat_color = (0, 255, 0)
             
-            if xblock_frames > 100:
+            if xblock_frames > 15:
                 active_threat_text, alert_id, threat_color = "CRITICAL: X-BLOCK SOS", "deliberate_sos", (0, 0, 255)
-            elif surrender_frames > 100:
+            elif surrender_frames > 15:
                 active_threat_text, alert_id, threat_color = "WARNING: SURRENDER POSE", "active_threat", (0, 165, 255)
-            elif slump_frames > 100:
+            elif slump_frames > 30:
                 active_threat_text, alert_id, threat_color = "MEDICAL: COLLAPSE DETECTED", "medical_collapse", (255, 0, 0)
 
             if active_threat_text:

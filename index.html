@@ -19,7 +19,6 @@
     --accent: #3b82f6;
     --police: #ef4444;
     --medical: #3b82f6;
-    --fire: #f97316;
   }
   
   .light-mode { 
@@ -160,13 +159,9 @@
   
   #medical .title, #medical h1 { color: var(--medical); }
   #medical .alert-box { background: rgba(59, 130, 246, 0.1); border-color: var(--medical); animation: flashBlue 1s infinite alternate; }
-  
-  #fire .title, #fire h1 { color: var(--fire); }
-  #fire .alert-box { background: rgba(249, 115, 22, 0.1); border-color: var(--fire); animation: flashOrange 0.4s infinite alternate; }
 
   @keyframes flashRed { from { box-shadow: 0 0 10px rgba(239,68,68,0.2); } to { box-shadow: 0 0 30px rgba(239,68,68,0.6); } }
   @keyframes flashBlue { from { box-shadow: 0 0 10px rgba(59,130,246,0.2); } to { box-shadow: 0 0 30px rgba(59,130,246,0.6); } }
-  @keyframes flashOrange { from { box-shadow: 0 0 10px rgba(249,115,22,0.2); } to { box-shadow: 0 0 30px rgba(249,115,22,0.6); } }
   @keyframes global-flash { from { background: var(--bg); } to { background: #450a0a; } }
 </style>
 </head>
@@ -210,7 +205,6 @@
 
     <button class="nav-btn active" onclick="switchTab('police')">🛡️ POLICE DISPATCH</button>
     <button class="nav-btn" onclick="switchTab('medical')">⚕️ EMS DISPATCH</button>
-    <button class="nav-btn" onclick="switchTab('fire')">🔥 FIRE DISPATCH</button>
     
     <button class="ctrl-btn" style="margin: 15px; text-align: center;" onclick="exportCSV()">⬇️ Export CSV Shift Log</button>
     
@@ -257,25 +251,6 @@
         <button class="btn-res" onclick="resolve('medical')">Resolve Medical</button>
       </div>
     </div>
-
-    <div id="fire" class="tab">
-      <h1>Fire Command</h1>
-      <div id="fire-alert" class="alert-box">
-        <div class="title">🔥 FIRE DETECTED: <span id="fire-bldg"></span></div>
-        <div class="alert-stats">
-          <span style="color:var(--text);">CONFIDENCE: <span id="fire-conf" style="color:var(--fire);">--</span>%</span>
-          <span style="color:var(--text);">AUTO-DISPATCH: <span id="fire-timer" style="color:var(--fire);">03:00</span></span>
-        </div>
-      </div>
-      <div class="details-box">
-        <div class="panel"><h3>THERMAL SNAPSHOT (CLICK TO EXPAND)</h3><img id="fire-img" class="snapshot" onclick="this.requestFullscreen()"></div>
-        <div class="panel"><h3>LIVE GEOLOCATION</h3><div id="fire-map" class="map-container"></div></div>
-      </div>
-      <div class="action-bar">
-        <button class="btn-ack" onclick="acknowledge('fire')">Acknowledge Incident</button>
-        <button class="btn-res" onclick="resolve('fire')">Resolve Fire</button>
-      </div>
-    </div>
   </div>
 
   <script>
@@ -287,7 +262,7 @@
     // Persistent Text Logs, Volatile Image Session
     let logs = JSON.parse(localStorage.getItem('pandoraLogs')) || [];
     const sessionImages = {}; 
-    const colors = { police: "var(--police)", medical: "var(--medical)", fire: "var(--fire)" };
+    const colors = { police: "var(--police)", medical: "var(--medical)" };
 
     setInterval(() => {
       document.getElementById("diag-cpu").innerText = Math.floor(Math.random() * 15 + 30) + "%";
@@ -295,7 +270,7 @@
     }, 2000);
 
     function initMaps() {
-      ['police', 'medical', 'fire'].forEach(dept => {
+      ['police', 'medical'].forEach(dept => {
         maps[dept] = L.map(`${dept}-map`).setView([16.4961, 80.4994], 18);
         L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(maps[dept]);
         markers[dept] = L.marker([16.4961, 80.4994]).addTo(maps[dept]);
@@ -323,8 +298,8 @@
     function playBeep(type) {
       if (isMuted) return;
       const osc = audioCtx.createOscillator();
-      osc.type = type === 'police' ? 'square' : type === 'fire' ? 'sawtooth' : 'sine';
-      osc.frequency.value = type === 'police' ? 800 : type === 'fire' ? 600 : 400;
+      osc.type = type === 'police' ? 'square' : 'sine';
+      osc.frequency.value = type === 'police' ? 800 : 400;
       osc.connect(audioCtx.destination); osc.start();
       setTimeout(() => osc.stop(), 600);
     }
@@ -366,9 +341,9 @@
 
     ws.onmessage = e => {
       const data = JSON.parse(e.data);
-      const tabMap = { active_threat: "police", deliberate_sos: "police", medical_collapse: "medical", fire_emergency: "fire" };
+      const tabMap = { active_threat: "police", deliberate_sos: "police", medical_collapse: "medical" };
       const target = tabMap[data.alert_type];
-      const logId = Date.now().toString(); // Generate Unique ID for the Volatile Image Array
+      const logId = Date.now().toString(); 
       
       document.querySelector(`button[onclick="switchTab('${target}')"]`).click();
       
@@ -385,7 +360,7 @@
       alertBox.style.background = "";
       alertBox.style.animation = "none";
       void alertBox.offsetWidth; 
-      alertBox.style.animation = target === 'police' ? "flashRed 0.6s infinite alternate" : target === 'medical' ? "flashBlue 1s infinite alternate" : "flashOrange 0.4s infinite alternate";
+      alertBox.style.animation = target === 'police' ? "flashRed 0.6s infinite alternate" : "flashBlue 1s infinite alternate";
       
       document.getElementById(`${target}-img`).src = "data:image/jpeg;base64," + data.image;
       
@@ -398,7 +373,6 @@
 
       const timeStr = new Date().toLocaleTimeString();
       
-      // Store image in volatile memory, store text in persistent storage
       sessionImages[logId] = data.image;
       logs.unshift({ id: logId, time: timeStr, type: data.alert_type.toUpperCase(), loc: data.room, dept: target });
       
@@ -414,14 +388,12 @@
         const div = document.createElement("div");
         div.className = "log-entry";
         div.style.borderColor = colors[log.dept];
-        // Log Click triggers the Modal
         div.onclick = () => viewLog(log.id);
         div.innerHTML = `<b>${log.time}</b><br>${log.type}<br><span style="color:var(--text-muted);">${log.loc}</span>`;
         container.appendChild(div);
       });
     }
 
-    // Modal Display Logic
     function viewLog(id) {
       const log = logs.find(l => l.id === id);
       if(!log) return;

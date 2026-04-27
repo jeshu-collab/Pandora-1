@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pandora-1 | VIT-AP Command Center</title>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<style>
+  :root { 
+    --bg: #0f172a; 
+    --panel: #1e293b; 
+    --border: #334155; 
+    --text: #f8fafc; 
+    --text-muted: #94a3b8;
+    --accent: #3b82f6;
+    --police: #ef4444;
+    --medical: #3b82f6;
+  }
+  
+  .light-mode { 
+    --bg: #f8fafc; 
+    --panel: #ffffff; 
+    --border: #e2e8f0; 
+    --text: #0f172a; 
+    --text-muted: #64748b;
+  }
+  
+  body { 
+    margin: 0; background: var(--bg); color: var(--text); 
+    font-family: 'Inter', sans-serif; display: flex; height: 100vh; overflow: hidden; 
+    transition: background-color 0.3s, color 0.3s; 
+  }
+  
+  /* Log Details Modal */
+  #log-modal {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+    background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(5px);
+    z-index: 10000; align-items: center; justify-content: center;
+  }
+  .modal-content {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    width: 60%; max-width: 800px; padding: 25px; position: relative; box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  }
+  .close-btn {
+    position: absolute; right: 20px; top: 20px; background: none; border: none; 
+    color: var(--text-muted); font-size: 24px; cursor: pointer; transition: 0.2s;
+  }
+  .close-btn:hover { color: var(--police); }
+
+  /* Login Overlay */
+  #login-overlay { 
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+    background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(10px); 
+    z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; 
+  }
+  #login-overlay h2 { font-weight: 800; font-size: 2.5rem; letter-spacing: 2px; margin-bottom: 5px; color: #fff; }
+  #login-overlay p { font-family: 'Fira Code', monospace; color: var(--accent); margin-bottom: 20px; }
+  #login-overlay input { 
+    padding: 15px 20px; font-size: 1.2rem; font-family: 'Fira Code', monospace; text-align: center; 
+    background: rgba(0,0,0,0.5); color: #fff; border: 2px solid var(--border); border-radius: 8px; outline: none; transition: 0.2s;
+  }
+  #login-overlay input:focus { border-color: var(--accent); box-shadow: 0 0 15px rgba(59, 130, 246, 0.5); }
+  
+  /* Top Navigation Bar */
+  #topbar { 
+    position: absolute; top: 0; right: 0; padding: 15px 25px; display: flex; gap: 15px; z-index: 1000; align-items: center;
+  }
+  .ctrl-btn { 
+    background: var(--panel); color: var(--text); border: 1px solid var(--border); 
+    padding: 8px 16px; border-radius: 6px; cursor: pointer; font-family: 'Inter', sans-serif; font-weight: 600; font-size: 13px; transition: 0.2s;
+  }
+  .ctrl-btn:hover { background: var(--border); }
+  #conn-status { font-family: 'Fira Code', monospace; font-weight: 600; font-size: 14px; margin-right: 10px; margin-left: 15px; }
+
+  /* Lockdown Override */
+  .btn-lockdown { 
+    background: rgba(239, 68, 68, 0.1); color: var(--police); border: 2px solid var(--police); 
+    padding: 8px 16px; cursor: pointer; border-radius: 6px; font-weight: 800; transition: 0.2s; font-size: 13px; letter-spacing: 1px;
+  }
+  .btn-lockdown:hover { background: var(--police); color: #fff; box-shadow: 0 0 15px rgba(239, 68, 68, 0.4); }
+  .lockdown-mode { animation: global-flash 1.5s infinite alternate; }
+
+  /* Sidebar Layout */
+  #sidebar { 
+    width: 320px; background: var(--panel); border-right: 1px solid var(--border); 
+    display: flex; flex-direction: column; box-shadow: 4px 0 15px rgba(0,0,0,0.1); z-index: 10;
+  }
+  
+  .sidebar-header { padding: 25px 20px 15px; border-bottom: 1px solid var(--border); }
+  .sidebar-header h3 { margin: 0; font-weight: 800; font-size: 1.2rem; letter-spacing: 1px; }
+  .sidebar-header p { margin: 5px 0 0; font-size: 11px; font-family: 'Fira Code', monospace; color: var(--text-muted); }
+
+  #diagnostics { padding: 20px; border-bottom: 1px solid var(--border); font-family: 'Fira Code', monospace; font-size: 12px; }
+  .diag-row { display: flex; justify-content: space-between; margin-bottom: 8px; color: var(--text-muted); }
+  .diag-row span:last-child { color: var(--text); font-weight: 600; }
+
+  .nav-btn { 
+    width: 100%; background: none; color: var(--text-muted); border: none; padding: 18px 20px; 
+    text-align: left; font-size: 15px; font-weight: 600; cursor: pointer; border-bottom: 1px solid var(--border); transition: 0.2s;
+  }
+  .nav-btn:hover { color: var(--text); background: rgba(255,255,255,0.02); }
+  .nav-btn.active { background: rgba(59, 130, 246, 0.1); color: var(--text); border-left: 4px solid var(--accent); }
+  
+  #log-container { flex: 1; padding: 15px; overflow-y: auto; font-family: 'Fira Code', monospace; font-size: 11px; }
+  .log-entry { 
+    margin-bottom: 10px; border-left: 3px solid; padding: 10px; background: rgba(0,0,0,0.2); 
+    border-radius: 0 6px 6px 0; color: var(--text-muted); line-height: 1.4; cursor: pointer; transition: 0.2s;
+  }
+  .log-entry:hover { background: rgba(255,255,255,0.05); transform: translateX(2px); }
+  .log-entry b { color: var(--text); }
+  
+  /* Main Dashboard Area */
+  #main { flex: 1; padding: 40px; display: flex; flex-direction: column; background: var(--bg); overflow-y: auto; }
+  .tab { display: none; height: 100%; animation: fadeIn 0.3s ease; }
+  .tab.active { display: flex; flex-direction: column; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+  
+  h1 { font-weight: 800; font-size: 2rem; margin-top: 0; margin-bottom: 25px; }
+  
+  /* Alert Box & Stats */
+  .alert-box { 
+    display: none; padding: 25px; margin-bottom: 30px; text-align: center; 
+    border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); border: 2px solid;
+  }
+  .alert-box .title { font-size: 28px; font-weight: 800; letter-spacing: 1px; }
+  .alert-stats { font-family: 'Fira Code', monospace; font-size: 14px; margin-top: 15px; display: flex; justify-content: center; gap: 40px; font-weight: 600; }
+  
+  /* Image and Map Panels */
+  .details-box { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; height: 400px; margin-bottom: 25px; }
+  .panel { 
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px; 
+    display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+  }
+  .panel h3 { margin: 0; padding: 15px 20px; font-size: 13px; font-weight: 800; letter-spacing: 1px; border-bottom: 1px solid var(--border); color: var(--text-muted); background: rgba(0,0,0,0.2); }
+  .snapshot { width: 100%; height: 100%; object-fit: cover; cursor: zoom-in; background: #000; transition: 0.3s; }
+  .snapshot:hover { opacity: 0.9; }
+  .snapshot:fullscreen { object-fit: contain; }
+  .map-container { width: 100%; height: 100%; z-index: 1; }
+
+  /* Action Buttons */
+  .action-bar { display: flex; gap: 15px; margin-top: auto; }
+  .action-bar button { 
+    flex: 1; padding: 16px; font-weight: 800; font-size: 14px; letter-spacing: 1px; cursor: pointer; 
+    border: none; border-radius: 8px; transition: 0.2s; text-transform: uppercase;
+  }
+  .action-bar button:active { transform: scale(0.98); }
+  .btn-ack { background: #eab308; color: #000; }
+  .btn-ack:hover { background: #facc15; }
+  .btn-res { background: #22c55e; color: #fff; }
+  .btn-res:hover { background: #4ade80; }
+
+  /* Tab Specific Colors */
+  #police .title, #police h1 { color: var(--police); }
+  #police .alert-box { background: rgba(239, 68, 68, 0.1); border-color: var(--police); animation: flashRed 0.6s infinite alternate; }
+  
+  #medical .title, #medical h1 { color: var(--medical); }
+  #medical .alert-box { background: rgba(59, 130, 246, 0.1); border-color: var(--medical); animation: flashBlue 1s infinite alternate; }
+
+  @keyframes flashRed { from { box-shadow: 0 0 10px rgba(239,68,68,0.2); } to { box-shadow: 0 0 30px rgba(239,68,68,0.6); } }
+  @keyframes flashBlue { from { box-shadow: 0 0 10px rgba(59,130,246,0.2); } to { box-shadow: 0 0 30px rgba(59,130,246,0.6); } }
+  @keyframes global-flash { from { background: var(--bg); } to { background: #450a0a; } }
+</style>
+</head>
+<body>
+
+  <div id="log-modal">
+    <div class="modal-content">
+      <button class="close-btn" onclick="document.getElementById('log-modal').style.display='none'">✖</button>
+      <h2 id="modal-title" style="margin-top:0; color:var(--accent); font-weight:800; letter-spacing:1px;">INCIDENT DETAILS</h2>
+      <p id="modal-info" style="font-family: 'Fira Code', monospace; color:var(--text-muted); border-bottom: 1px solid var(--border); padding-bottom: 15px; margin-bottom: 20px;"></p>
+      <img id="modal-img" src="" style="width:100%; max-height:400px; object-fit:contain; border:2px solid #000; background:#000; border-radius:8px;" alt="IMAGE PURGED FROM VOLATILE MEMORY">
+      <div id="modal-no-img" style="display:none; text-align:center; padding: 40px; border: 1px dashed var(--police); color: var(--police); font-family: 'Fira Code', monospace;">[!] IMAGE DATA PURGED FROM VOLATILE MEMORY FOR SECURITY PURPOSES</div>
+    </div>
+  </div>
+
+  <div id="login-overlay">
+    <h2>PANDORA-1 COMMAND NODE</h2>
+    <p>AUTHORIZED ACCESS ONLY // VIT-AP</p>
+    <input type="password" id="passcode" placeholder="Enter Credentials" onkeyup="checkLogin(event)" autofocus>
+  </div>
+
+  <div id="topbar">
+    <button class="btn-lockdown" onclick="triggerLockdown()">🚨 INITIATE GLOBAL LOCKDOWN</button>
+    <span id="conn-status" style="color: #64748b;">WAITING FOR UPLINK...</span>
+    <button class="ctrl-btn" onclick="toggleTheme()">🌓 Theme</button>
+    <button class="ctrl-btn" id="mute-btn" onclick="toggleMute()">🔊 Audio On</button>
+  </div>
+
+  <div id="sidebar">
+    <div class="sidebar-header">
+      <h3>COMMAND CENTER</h3>
+      <p>OPERATOR: G. NAVADEEP</p>
+    </div>
+
+    <div id="diagnostics">
+      <div class="diag-row"><span>SYS_LOAD</span> <span id="diag-cpu">32%</span></div>
+      <div class="diag-row"><span>MEMORY_ALLOC</span> <span id="diag-ram">4.1 GB</span></div>
+      <div class="diag-row"><span>VISION_ENGINE</span> <span id="diag-yolo">YOLO_v8</span></div>
+      <div class="diag-row"><span>LATENCY</span> <span id="diag-net">14 ms</span></div>
+    </div>
+
+    <button class="nav-btn active" onclick="switchTab('police')">🛡️ POLICE DISPATCH</button>
+    <button class="nav-btn" onclick="switchTab('medical')">⚕️ EMS DISPATCH</button>
+    
+    <button class="ctrl-btn" style="margin: 15px; text-align: center;" onclick="exportCSV()">⬇️ Export CSV Shift Log</button>
+    
+    <div id="log-container">
+      <div style="margin-bottom:15px; font-weight:800; font-family:'Inter',sans-serif; color: var(--text); padding-left:5px;">INCIDENT HISTORY</div>
+      </div>
+  </div>
+
+  <div id="main">
+    <div id="police" class="tab active">
+      <h1>Police Command</h1>
+      <div id="police-alert" class="alert-box">
+        <div class="title">🚨 THREAT DETECTED: <span id="police-bldg"></span></div>
+        <div class="alert-stats">
+          <span style="color:var(--text);">CONFIDENCE: <span id="police-conf" style="color:var(--police);">--</span>%</span>
+          <span style="color:var(--text);">AUTO-DISPATCH: <span id="police-timer" style="color:var(--police);">03:00</span></span>
+        </div>
+      </div>
+      <div class="details-box">
+        <div class="panel"><h3>EVIDENCE SNAPSHOT (CLICK TO EXPAND)</h3><img id="police-img" class="snapshot" onclick="this.requestFullscreen()"></div>
+        <div class="panel"><h3>LIVE GEOLOCATION</h3><div id="police-map" class="map-container"></div></div>
+      </div>
+      <div class="action-bar">
+        <button class="btn-ack" onclick="acknowledge('police')">Acknowledge Incident</button>
+        <button class="btn-res" onclick="resolve('police')">Resolve Threat</button>
+      </div>
+    </div>
+
+    <div id="medical" class="tab">
+      <h1>Medical Command</h1>
+      <div id="medical-alert" class="alert-box">
+        <div class="title">⚕️ MEDICAL EMERGENCY: <span id="medical-bldg"></span></div>
+        <div class="alert-stats">
+          <span style="color:var(--text);">CONFIDENCE: <span id="medical-conf" style="color:var(--medical);">--</span>%</span>
+          <span style="color:var(--text);">AUTO-DISPATCH: <span id="medical-timer" style="color:var(--medical);">03:00</span></span>
+        </div>
+      </div>
+      <div class="details-box">
+        <div class="panel"><h3>PATIENT SNAPSHOT (CLICK TO EXPAND)</h3><img id="medical-img" class="snapshot" onclick="this.requestFullscreen()"></div>
+        <div class="panel"><h3>LIVE GEOLOCATION</h3><div id="medical-map" class="map-container"></div></div>
+      </div>
+      <div class="action-bar">
+        <button class="btn-ack" onclick="acknowledge('medical')">Acknowledge Incident</button>
+        <button class="btn-res" onclick="resolve('medical')">Resolve Medical</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let isMuted = false;
+    let maps = {};
+    let markers = {};
+    let countdowns = {};
+    
+    // Persistent Text Logs, Volatile Image Session
+    let logs = JSON.parse(localStorage.getItem('pandoraLogs')) || [];
+    const sessionImages = {}; 
+    const colors = { police: "var(--police)", medical: "var(--medical)" };
+
+    setInterval(() => {
+      document.getElementById("diag-cpu").innerText = Math.floor(Math.random() * 15 + 30) + "%";
+      document.getElementById("diag-net").innerText = Math.floor(Math.random() * 10 + 10) + " ms";
+    }, 2000);
+
+    function initMaps() {
+      ['police', 'medical'].forEach(dept => {
+        maps[dept] = L.map(`${dept}-map`).setView([16.4961, 80.4994], 18);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(maps[dept]);
+        markers[dept] = L.marker([16.4961, 80.4994]).addTo(maps[dept]);
+      });
+    }
+
+    function checkLogin(e) {
+      if(e.key === 'Enter') {
+        if(e.target.value === 'admin') {
+          document.getElementById('login-overlay').style.display = 'none';
+          initMaps(); renderLogs();
+        } else {
+          e.target.value = ''; e.target.placeholder = 'ACCESS DENIED';
+        }
+      }
+    }
+
+    function toggleTheme() { document.body.classList.toggle('light-mode'); }
+    function toggleMute() {
+      isMuted = !isMuted;
+      document.getElementById('mute-btn').innerText = isMuted ? '🔇 Audio Off' : '🔊 Audio On';
+    }
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    function playBeep(type) {
+      if (isMuted) return;
+      const osc = audioCtx.createOscillator();
+      osc.type = type === 'police' ? 'square' : 'sine';
+      osc.frequency.value = type === 'police' ? 800 : 400;
+      osc.connect(audioCtx.destination); osc.start();
+      setTimeout(() => osc.stop(), 600);
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+      event.currentTarget?.classList.add('active');
+      setTimeout(() => maps[tabId].invalidateSize(), 100);
+    }
+
+    function startTimer(dept) {
+      clearInterval(countdowns[dept]);
+      let time = 180;
+      countdowns[dept] = setInterval(() => {
+        if(time <= 0) { clearInterval(countdowns[dept]); return; }
+        time--;
+        let m = Math.floor(time / 60).toString().padStart(2, '0');
+        let s = (time % 60).toString().padStart(2, '0');
+        document.getElementById(`${dept}-timer`).innerText = `${m}:${s}`;
+      }, 1000);
+    }
+
+    function triggerLockdown() {
+      document.body.classList.toggle('lockdown-mode');
+      if (!isMuted) playBeep('police');
+    }
+
+    const ws = new WebSocket("ws://localhost:8765");
+    ws.onopen = () => { 
+      const status = document.getElementById("conn-status");
+      status.innerHTML = "🟢 SERVER SYNCED"; status.style.color = "#22c55e"; 
+    };
+    ws.onclose = () => { 
+      const status = document.getElementById("conn-status");
+      status.innerHTML = "🔴 OFFLINE"; status.style.color = "#ef4444"; 
+    };
+
+    ws.onmessage = e => {
+      const data = JSON.parse(e.data);
+      const tabMap = { active_threat: "police", deliberate_sos: "police", medical_collapse: "medical" };
+      const target = tabMap[data.alert_type];
+      const logId = Date.now().toString(); 
+      
+      document.querySelector(`button[onclick="switchTab('${target}')"]`).click();
+      
+      if (data.alert_type === "deliberate_sos") {
+          document.getElementById(`${target}-bldg`).innerHTML = `X-BLOCK SOS <br> <span style='font-size:16px; color:var(--text-muted);'>${data.building} - ${data.room}</span>`;
+      } else {
+          document.getElementById(`${target}-bldg`).innerHTML = `${data.building} - ${data.room}`;
+      }
+      
+      document.getElementById(`${target}-conf`).innerText = data.confidence;
+      
+      const alertBox = document.getElementById(`${target}-alert`);
+      alertBox.style.display = "block";
+      alertBox.style.background = "";
+      alertBox.style.animation = "none";
+      void alertBox.offsetWidth; 
+      alertBox.style.animation = target === 'police' ? "flashRed 0.6s infinite alternate" : "flashBlue 1s infinite alternate";
+      
+      document.getElementById(`${target}-img`).src = "data:image/jpeg;base64," + data.image;
+      
+      const latlng = new L.LatLng(data.lat, data.lng);
+      markers[target].setLatLng(latlng);
+      maps[target].flyTo(latlng, 18);
+      
+      playBeep(target);
+      startTimer(target);
+
+      const timeStr = new Date().toLocaleTimeString();
+      
+      sessionImages[logId] = data.image;
+      logs.unshift({ id: logId, time: timeStr, type: data.alert_type.toUpperCase(), loc: data.room, dept: target });
+      
+      if (logs.length > 50) logs.pop();
+      localStorage.setItem('pandoraLogs', JSON.stringify(logs));
+      renderLogs();
+    };
+
+    function renderLogs() {
+      const container = document.getElementById("log-container");
+      container.innerHTML = '<div style="margin-bottom:15px; font-weight:800; font-family:\'Inter\',sans-serif; color: var(--text); padding-left:5px;">INCIDENT HISTORY</div>';
+      logs.forEach(log => {
+        const div = document.createElement("div");
+        div.className = "log-entry";
+        div.style.borderColor = colors[log.dept];
+        div.onclick = () => viewLog(log.id);
+        div.innerHTML = `<b>${log.time}</b><br>${log.type}<br><span style="color:var(--text-muted);">${log.loc}</span>`;
+        container.appendChild(div);
+      });
+    }
+
+    function viewLog(id) {
+      const log = logs.find(l => l.id === id);
+      if(!log) return;
+      
+      document.getElementById('modal-title').innerText = log.type;
+      document.getElementById('modal-title').style.color = colors[log.dept];
+      document.getElementById('modal-info').innerHTML = `<b>TIMESTAMP:</b> ${log.time} &nbsp;&nbsp;|&nbsp;&nbsp; <b>LOCATION:</b> ${log.loc}`;
+      
+      const imgElem = document.getElementById('modal-img');
+      const noImgElem = document.getElementById('modal-no-img');
+      
+      if(sessionImages[id]) {
+        imgElem.src = "data:image/jpeg;base64," + sessionImages[id];
+        imgElem.style.display = "block";
+        noImgElem.style.display = "none";
+      } else {
+        imgElem.style.display = "none";
+        noImgElem.style.display = "block";
+      }
+      
+      document.getElementById('log-modal').style.display = 'flex';
+    }
+
+    function acknowledge(dept) {
+      clearInterval(countdowns[dept]);
+      document.getElementById(`${dept}-timer`).innerText = "ACKNOWLEDGED";
+      document.getElementById(`${dept}-alert`).style.animation = "none";
+      document.getElementById(`${dept}-alert`).style.background = "rgba(0,0,0,0.2)";
+    }
+    
+    function resolve(dept) {
+      clearInterval(countdowns[dept]);
+      document.getElementById(`${dept}-alert`).style.display = "none";
+      document.getElementById(`${dept}-img`).src = "";
+    }
+
+    function exportCSV() {
+      let csv = "data:text/csv;charset=utf-8,Time,Threat_Type,Location\n";
+      logs.forEach(e => csv += `${e.time},${e.type},${e.loc}\n`);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodeURI(csv));
+      link.setAttribute("download", "Pandora_1_Shift_Report.csv");
+      document.body.appendChild(link); link.click();
+    }
+  </script>
+</body>
+</html>

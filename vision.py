@@ -7,7 +7,7 @@ mp_pose = mp.solutions.pose
 pose = mp_pose.Pose(min_detection_confidence=0.7, min_tracking_confidence=0.7) # Added tracking confidence for stability
 mp_drawing = mp.solutions.drawing_utils
 
-cap = cv2.VideoCapture('test.mp4')
+cap = cv2.VideoCapture(1)
 print("Pandora-1 Vision Engine Online. High-Accuracy Mode Active...")
 
 # --- THE TIME BUFFERS ---

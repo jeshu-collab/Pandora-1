@@ -1,0 +1,241 @@
+import cv2
+import math
+import time
+import os
+import winsound 
+import urllib.request
+import numpy as np
+import mediapipe as mp
+from mediapipe.tasks import python
+from mediapipe.tasks.python import vision
+from mediapipe.framework.formats import landmark_pb2
+from datetime import datetime
+
+# --- SYSTEM INITIALIZATION & HEAVY MODEL DOWNLOAD ---
+print("Booting Pandora-PRO V10 Ultimate Command Center...")
+
+MODEL_PATH = 'pose_landmarker_heavy.task'
+if not os.path.exists(MODEL_PATH):
+    print("[*] Downloading Google HEAVY Multi-Agent Brain (This may take a minute)...")
+    url = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_heavy/float16/1/pose_landmarker_heavy.task"
+    urllib.request.urlretrieve(url, MODEL_PATH)
+    print("[*] Download Complete!")
+
+# Initialize Google Tasks API (Heavyweight Configuration)
+base_options = python.BaseOptions(model_asset_path=MODEL_PATH)
+options = vision.PoseLandmarkerOptions(
+    base_options=base_options,
+    num_poses=5, 
+    min_pose_detection_confidence=0.35, 
+    min_pose_presence_confidence=0.35,  
+    min_tracking_confidence=0.5)        
+detector = vision.PoseLandmarker.create_from_options(options)
+
+EVIDENCE_DIR = "Evidence_Logs"
+if not os.path.exists(EVIDENCE_DIR):
+    os.makedirs(EVIDENCE_DIR)
+
+cap = cv2.VideoCapture(1) # Change to 1 if using external cam
+
+# Hardware Override: Force HD Resolution for distant tracking
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
+# Global Buffers
+xblock_frames, surrender_frames, slump_frames, fire_frames = 0, 0, 0, 0
+last_log_time = 0  
+LOG_COOLDOWN = 5.0 
+prev_frame_time = 0
+FONT = cv2.FONT_HERSHEY_SIMPLEX
+
+# ==========================================
+# CUSTOM UI DRAWING ENGINES
+# ==========================================
+
+def draw_pro_text(frame, text, pos, scale, color, thickness=2):
+    cv2.putText(frame, text, pos, FONT, scale, (0, 0, 0), thickness + 2, cv2.LINE_AA)
+    cv2.putText(frame, text, pos, FONT, scale, color, thickness, cv2.LINE_AA)
+
+def draw_target_lock(frame, x, y, color):
+    x, y = int(x), int(y)
+    size, thick, length = 45, 4, 15
+    cv2.circle(frame, (x, y), 2, color, -1)
+    cv2.line(frame, (x - size, y - size), (x - size + length, y - size), color, thick)
+    cv2.line(frame, (x - size, y - size), (x - size, y - size + length), color, thick)
+    cv2.line(frame, (x + size, y - size), (x + size - length, y - size), color, thick)
+    cv2.line(frame, (x + size, y - size), (x + size, y - size + length), color, thick)
+    cv2.line(frame, (x - size, y + size), (x - size + length, y + size), color, thick)
+    cv2.line(frame, (x - size, y + size), (x - size, y + size - length), color, thick)
+    cv2.line(frame, (x + size, y + size), (x + size - length, y + size), color, thick)
+    cv2.line(frame, (x + size, y + size), (x + size, y + size - length), color, thick)
+
+def draw_cctv_hud(frame, fps, w, h):
+    now = datetime.now().strftime("%Y/%m/%d | %H:%M:%S.%f")[:-3]
+    if int(time.time() * 2) % 2 == 0:
+        cv2.circle(frame, (35, 35), 8, (0, 0, 255), -1)
+    draw_pro_text(frame, "REC", (55, 42), 0.8, (255, 255, 255), 2)
+    draw_pro_text(frame, now, (w - 320, 42), 0.7, (255, 255, 255), 2)
+    draw_pro_text(frame, f"CAM-01 | FPS: {int(fps)} | PANDORA-PRO V10", (20, h - 20), 0.6, (0, 255, 0), 2)
+
+def log_evidence(frame, threat_name):
+    global last_log_time
+    current_time = time.time()
+    winsound.PlaySound("SystemHand", winsound.SND_ASYNC | winsound.SND_ALIAS)
+    if current_time - last_log_time >= LOG_COOLDOWN:
+        timestamp = datetime.now().strftime('%H-%M-%S')
+        filename = f"{EVIDENCE_DIR}/THREAT_{threat_name}_{timestamp}.jpg"
+        cv2.imwrite(filename, frame)
+        print(f"[!] EVIDENCE LOGGED: {filename}")
+        last_log_time = current_time
+
+# ==========================================
+# MAIN SECURITY AI LOOP
+# ==========================================
+
+while cap.isOpened():
+    success, frame = cap.read()
+    if not success: break
+    frame = cv2.flip(frame, 1)
+    h, w, _ = frame.shape
+
+    current_time = time.time()
+    fps = 1 / (current_time - prev_frame_time) if prev_frame_time else 0
+    prev_frame_time = current_time
+
+    annotated_frame = frame.copy()
+    any_xblock, any_surrender, any_slump, any_fire = False, False, False, False
+
+    # ---------------------------------------------------------
+    # ENVIRONMENTAL SCANNER (THERMAL FIRE DETECTION)
+    # ---------------------------------------------------------
+    blurred = cv2.GaussianBlur(frame, (21, 21), 0)
+    hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
+    
+    lower_fire = np.array([15, 100, 150], dtype=np.uint8)
+    upper_fire = np.array([35, 255, 255], dtype=np.uint8)
+    
+    fire_mask = cv2.inRange(hsv, lower_fire, upper_fire)
+    contours, _ = cv2.findContours(fire_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    for c in contours:
+        if cv2.contourArea(c) > 1500:  # Ignore small orange objects
+            any_fire = True
+            fx, fy, fw, fh = cv2.boundingRect(c)
+            cv2.rectangle(annotated_frame, (fx, fy), (fx + fw, fy + fh), (0, 120, 255), 2)
+            cv2.putText(annotated_frame, "THERMAL ANOMALY", (fx, fy - 10), FONT, 0.5, (0, 120, 255), 2)
+
+    # ---------------------------------------------------------
+    # BIOMETRIC SCANNER (GOOGLE POSE AI)
+    # ---------------------------------------------------------
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
+    detection_result = detector.detect(mp_image)
+
+    if detection_result.pose_landmarks:
+        for pose_landmarks in detection_result.pose_landmarks:
+            
+            # Draw the clean white skeleton
+            pose_landmarks_proto = landmark_pb2.NormalizedLandmarkList()
+            pose_landmarks_proto.landmark.extend([
+                landmark_pb2.NormalizedLandmark(x=lm.x, y=lm.y, z=lm.z, visibility=lm.visibility) for lm in pose_landmarks
+            ])
+
+            mp.solutions.drawing_utils.draw_landmarks(
+                annotated_frame, 
+                pose_landmarks_proto,
+                mp.solutions.pose.POSE_CONNECTIONS,
+                landmark_drawing_spec=mp.solutions.drawing_utils.DrawingSpec(color=(255,255,255), thickness=2, circle_radius=2),
+                connection_drawing_spec=mp.solutions.drawing_utils.DrawingSpec(color=(200,200,200), thickness=2)
+            )
+
+            # Extract coordinates & confidence scores
+            def get_pt(index):
+                pt = pose_landmarks[index]
+                return (int(pt.x * w), int(pt.y * h), pt.visibility)
+
+            nx, ny, nc = get_pt(0)
+            ls_x, ls_y, ls_c = get_pt(11)
+            rs_x, rs_y, rs_c = get_pt(12)
+            le_x, le_y, le_c = get_pt(13)
+            re_x, re_y, re_c = get_pt(14)
+            lw_x, lw_y, lw_c = get_pt(15)
+            rw_x, rw_y, rw_c = get_pt(16)
+            l_hip_x, l_hip_y, l_hip_c = get_pt(23)
+            r_hip_x, r_hip_y, r_hip_c = get_pt(24)
+
+            # Only run math if shoulders are visible
+            if ls_c > 0.4 and rs_c > 0.4:
+                shoulder_width = math.hypot(ls_x - rs_x, ls_y - rs_y)
+                
+                # 1. UPGRADED SLUMP (Hip-Line Breach)
+                if l_hip_c > 0.4 and r_hip_c > 0.4:
+                    head_below_hips = (ny > l_hip_y) and (ny > r_hip_y)
+                    if head_below_hips:
+                        any_slump = True
+                        draw_target_lock(annotated_frame, nx, ny, (255, 0, 0))
+
+                # 2. X-BLOCK & SURRENDER (Strict Wrist Symmetry)
+                if lw_c > 0.6 and rw_c > 0.6 and le_c > 0.4 and re_c > 0.4:
+                    wrist_distance = math.hypot(lw_x - rw_x, lw_y - rw_y)
+                    wrist_y_diff = abs(lw_y - rw_y) 
+                    is_aligned = wrist_y_diff < 60 
+                    is_raised = (lw_y < le_y) and (rw_y < re_y)
+                    
+                    is_crossed = wrist_distance < (shoulder_width * 0.45) 
+                    
+                    if is_crossed and is_raised and is_aligned:
+                        any_xblock = True
+                        draw_target_lock(annotated_frame, nx, ny, (0, 0, 255)) 
+
+                    hands_high = (lw_y < ls_y) and (rw_y < rs_y)
+                    hands_apart = wrist_distance > (shoulder_width * 0.8)
+                    if hands_high and hands_apart and is_aligned:
+                        any_surrender = True
+                        draw_target_lock(annotated_frame, nx, ny, (0, 165, 255)) 
+
+    # --- BUFFER SMOOTHING ---
+    fire_frames = max(0, fire_frames + 1 if any_fire else fire_frames - 2)
+    xblock_frames = max(0, xblock_frames + 1 if any_xblock else xblock_frames - 2)
+    surrender_frames = max(0, surrender_frames + 1 if any_surrender else surrender_frames - 2)
+    slump_frames = max(0, slump_frames + 1 if any_slump else slump_frames - 2)
+
+    # --- ALARMS & EVIDENCE CAPTURE ---
+    active_threat = None
+    threat_color = (0, 255, 0)
+    
+    # Priority Routing: Fire overrides all biometric threats
+    if fire_frames > 20: 
+        active_threat = "HAZARD: FIRE DETECTED"
+        threat_color = (0, 120, 255) 
+        log_evidence(annotated_frame, "FIRE")
+    elif xblock_frames > 15:
+        active_threat = "CRITICAL: X-BLOCK SOS"
+        threat_color = (0, 0, 255)
+        log_evidence(annotated_frame, "XBLOCK")
+    elif surrender_frames > 15:
+        active_threat = "WARNING: SURRENDER POSE"
+        threat_color = (0, 165, 255)
+        log_evidence(annotated_frame, "SURRENDER")
+    elif slump_frames > 50: # Slightly faster slump trigger for medical emergencies
+        active_threat = "MEDICAL: COLLAPSE DETECTED"
+        threat_color = (255, 0, 0)
+        log_evidence(annotated_frame, "MEDICAL")
+
+    # Render Alarms
+    if active_threat:
+        cv2.rectangle(annotated_frame, (0,0), (w,h), threat_color, 12)
+        draw_pro_text(annotated_frame, active_threat, (w//2 - 260, 100), 1.2, threat_color, 4)
+        
+        time_since_log = current_time - last_log_time
+        if time_since_log < LOG_COOLDOWN:
+            remaining = round(LOG_COOLDOWN - time_since_log, 1)
+            draw_pro_text(annotated_frame, f"EVIDENCE COOLDOWN: {remaining}s", (w//2 - 170, 140), 0.8, (0, 255, 255), 2)
+
+    # Render CCTV HUD Last
+    draw_cctv_hud(annotated_frame, fps, w, h)
+    cv2.imshow("Pandora-PRO V10: Enterprise", annotated_frame)
+
+    if cv2.waitKey(1) & 0xFF == ord('q'): break
+
+cap.release()
+cv2.destroyAllWindows()
